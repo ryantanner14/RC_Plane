@@ -20,29 +20,24 @@
 #define RUDDER_IN_PIN 6
 #define R_AILERON_IN_PIN 7
 #define L_AILERON_IN_PIN A3
-
 // Assign your channel out pins
 #define THROTTLE_OUT_PIN 5
 #define ELEVATOR_OUT_PIN 9
 #define RUDDER_OUT_PIN 10
 #define R_AILERON_OUT_PIN 4
 #define L_AILERON_OUT_PIN 11
-
-// Assign servo indexes //reassigned order, previous order was 0,1,2,3,4,5
-#define SERVO_THROTTLE 2
+// Assign servo indexes
+#define SERVO_THROTTLE 0
 #define SERVO_ELEVATOR 1
-#define SERVO_RUDDER 3
-#define SERVO_R_AILERON 0 //may need to swap this and throttle since this is channel 1
-#define SERVO_L_AILERON 4
+#define SERVO_RUDDER 2
+#define SERVO_R_AILERON 3 //may need to swap this and throttle since this is channel 1
 #define SERVO_FRAME_SPACE 5 //changed from 3 to 5 with adding ailerons
-
 // These bit flags are set in bUpdateFlagsShared to indicate which
 // channels have new signals
-#define THROTTLE_FLAG 3
+#define THROTTLE_FLAG 1
 #define ELEVATOR_FLAG 2
 #define RUDDER_FLAG 4
-#define R_AILERON_FLAG 1 //arbitrarily picked 5
-#define L_AILERON_FLAG 5 //arbitrarily picked 6
+#define R_AILERON_FLAG 5 //arbitrarily picked 5
 // holds the update flags defined above
 volatile uint8_t bUpdateFlagsShared;
 // shared variables are updated by the ISR and read by loop.
@@ -55,7 +50,6 @@ volatile uint16_t unThrottleInShared;
 volatile uint16_t unElevatorInShared;
 volatile uint16_t unRudderInShared;
 volatile uint16_t unR_AileronInShared;
-volatile uint16_t unL_AileronInShared;
 // These are used to record the rising edge of a pulse in the calcInput functions
 // They do not need to be volatile as they are only used in the ISR. If we wanted
 // to refer to these in loop and the ISR then they would need to be declared volatile
@@ -63,7 +57,6 @@ uint16_t unThrottleInStart;
 uint16_t unElevatorInStart;
 uint16_t unRudderInStart;
 uint16_t unR_AileronInStart;
-uint16_t unL_AileronInStart;
 uint16_t unLastAuxIn = 0;
 uint32_t ulVariance = 0;
 uint32_t ulGetNextSampleMillis = 0;
@@ -79,7 +72,7 @@ void setup()
  CRCArduinoFastServos::attach(SERVO_ELEVATOR,ELEVATOR_OUT_PIN);
  CRCArduinoFastServos::attach(SERVO_RUDDER,RUDDER_OUT_PIN);
  CRCArduinoFastServos::attach(SERVO_R_AILERON,R_AILERON_OUT_PIN);
- CRCArduinoFastServos::attach(SERVO_L_AILERON,L_AILERON_OUT_PIN); 
+ 
  // lets set a standard rate of 50 Hz by setting a frame space of 10 * 2000 = 3 Servos + 7 times 2000
  CRCArduinoFastServos::setFrameSpaceA(SERVO_FRAME_SPACE,7*2000);
  CRCArduinoFastServos::begin();
@@ -90,7 +83,6 @@ void setup()
  PCintPort::attachInterrupt(ELEVATOR_IN_PIN, calcElevator,CHANGE);
  PCintPort::attachInterrupt(RUDDER_IN_PIN, calcRudder,CHANGE);
  PCintPort::attachInterrupt(R_AILERON_IN_PIN, calcR_Aileron,CHANGE);
- PCintPort::attachInterrupt(L_AILERON_IN_PIN, calcL_Aileron,CHANGE);
 }
 void loop()
 {
@@ -101,7 +93,6 @@ void loop()
  static uint16_t unElevatorIn;
  static uint16_t unRudderIn;
  static uint16_t unR_AileronIn;
- static uint16_t unL_AileronIn;
  // local copy of update flags
  static uint8_t bUpdateFlags;
  // check shared update flags to see if any channels have a new signal
@@ -135,11 +126,6 @@ void loop()
    {
      unR_AileronIn = unR_AileronInShared;
    }
-
-   if(bUpdateFlags & L_AILERON_FLAG)
-   {
-     unL_AileronIn = unL_AileronInShared;
-   }
    // clear shared copy of updated flags as we have already taken the updates
    // we still have a local copy if we need to use it in bUpdateFlags
    bUpdateFlagsShared = 0;
@@ -167,37 +153,22 @@ void loop()
  {
    CRCArduinoFastServos::writeMicroseconds(SERVO_THROTTLE,unThrottleIn);
  }
-
- 
  if(bUpdateFlags & ELEVATOR_FLAG)
  {
+  //Serial.println(unElevatorIn);
    CRCArduinoFastServos::writeMicroseconds(SERVO_ELEVATOR,unElevatorIn);
  }
-
- 
  if(bUpdateFlags & RUDDER_FLAG)
  {
   CRCArduinoFastServos::writeMicroseconds(SERVO_RUDDER,unRudderIn);
   }
-
-  
  if(bUpdateFlags & R_AILERON_FLAG)
  {
-  //Serial.println(unR_AileronIn);
+    Serial.println(unR_AileronIn);
   CRCArduinoFastServos::writeMicroseconds(SERVO_R_AILERON,unR_AileronIn);
-  }
-
-  
-  if(bUpdateFlags & L_AILERON_FLAG)
- {
-  Serial.println(unL_AileronIn);
-  CRCArduinoFastServos::writeMicroseconds(SERVO_L_AILERON,unL_AileronIn);
   }
  bUpdateFlags = 0;
 }
-
-
-
 // simple interrupt service routine
 void calcThrottle()
 {
@@ -210,10 +181,7 @@ void calcThrottle()
    unThrottleInShared = (TCNT1 - unThrottleInStart)>>1;
    bUpdateFlagsShared |= THROTTLE_FLAG;
  }
- 
 }
-
-
 void calcElevator()
 {
  if(PCintPort::pinState)
@@ -226,8 +194,6 @@ void calcElevator()
    bUpdateFlagsShared |= ELEVATOR_FLAG;
  }
 }
-
-
 void calcRudder()
 {
  if(PCintPort::pinState)
@@ -239,8 +205,6 @@ void calcRudder()
    unRudderInShared = (TCNT1 - unRudderInStart)>>1;
    bUpdateFlagsShared |= RUDDER_FLAG; }
 }
-
-
 void calcR_Aileron()
 {
  if(PCintPort::pinState)
@@ -253,18 +217,6 @@ void calcR_Aileron()
    bUpdateFlagsShared |= R_AILERON_FLAG; }
 }
 
-
-void calcL_Aileron()
-{
- if(PCintPort::pinState)
- {
-   unL_AileronInStart = TCNT1;
- }
- else
- {
-   unL_AileronInShared = (TCNT1 - unL_AileronInStart)>>1;
-   bUpdateFlagsShared |= L_AILERON_FLAG; }
-}
 
 
 void landPlane()
